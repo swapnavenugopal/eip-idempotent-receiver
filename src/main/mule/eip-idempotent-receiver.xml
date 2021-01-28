@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="40d217f8-e762-4f48-9439-7ca769f94d59" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="60ec9b52-3beb-4029-80fa-9ddf3cb423e5" maxEntries="100" entryTtl="1" entryTtlUnit="HOURS"/>
+	<flow name="eip-idempotent-receiverFlow" doc:id="c9f1011b-ad8e-4f1b-abcf-ace7871cc6bc" >
+		<http:listener doc:name="POST  /eip/idempotent" doc:id="8ee599f8-e1bb-49ca-9a7a-4962bc151c34" config-ref="HTTP_Listener_config" path="/eip/idempotent"/>
+		<logger level="INFO" doc:name="Log input" doc:id="200d4b15-734a-4f41-8a2c-e87726c5bc9e" message="Log message for eip-idempotent-receiver"/>
+		<idempotent-message-validator doc:name="Idempotent Message Validator" doc:id="1a8f714a-3c61-4ddd-83b3-4daafa8182d7" idExpression="#[payload.name ++ payload.orderId]" objectStore="Object_store"/>
+		<ee:transform doc:name="Transform Message" doc:id="eb5bf9a3-d08f-4b95-9f32-d0ffddb33ffa" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status : "Success",
+	"message": "Order created successfully for "++ payload.name 
+	
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log response" doc:id="b911116b-00fd-4903-b515-81d5ca52dc2c" />
+		<error-handler>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b826eecb-b6ea-4eca-86dd-f1fecac0acfd" >
+				<logger level="INFO" doc:name="Log Error" doc:id="ceff93cf-21b9-4e92-bce3-6fec978bbcc4" />
+				<ee:transform doc:name="Transform Message" doc:id="5b99fb3d-7697-4eb8-b478-902f9ca5b8ec" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+	status : "Failed",
+	"message": "Duplicate order for customer  "++ payload.name ++ " order id " ++ payload.orderId
+	
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
